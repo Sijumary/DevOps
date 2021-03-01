@@ -1,0 +1,180 @@
+Git in nutshell:
+
+
+Git tracks changes in the source code
+
+
+ git init: initialize the git repository 
+git add .: adds the entire project to the repository
+git commit -m" pass a comment in the repository": commits/saves the changes in the repository
+version 1 is created in the repository
+git log: gives the author, date and what changes are made
+git status: gives the status of the repository i.e. what modification has not been updated.
+git add <specific file name>: adds the file into the repository
+After adding the file it is not committed 
+git restore --: To resore the file 
+creates the second version with the changes
+git diff <version 1 and 2 from log(1st 8 numbers)>: check the difference in the commits(changes) that we have done
+with that we can see the changes i.e :-- shows deleted and ++ shows added lines
+REVERT BACK:
+git checkout<specify the version> : to checkout the version
+code <code name>: open in vs editor
+
+version control is not backup!!!!!!!
+different versions store only the changes not the entire file!!!!
+
+
+maintaining multiple versions:
+MARATHON TROUT APP
+back up
+branching:
+common source is not changed
+we get master and premimum
+git checkout master: to checkout/work with master
+master is the base application
+to checkout premimum version: git checkout premimum
+after bug fixes in the master we need to change it in premimum for that we merge
+git merge master
+after using this command copy of the file is stored in the premimum 
+while merging there might be conflicts due to the bug fixes for that we can check the difference to know which lines are conflicting
+
+there are bug trackers to track the bugs and it will notify from the commits done eg:-
+
+Jira(project mgmt tools)
+tracks the work and also allocates the task
+
+client server connection:
+Git uses 4 basic protocols: Local, HTTP,SSH and Git.
+local protocol:
+If you have a shared mounted filesystem, then you can clone, push to, and pull from a local file-based repository.
+To clone a repository like this, or to add one as a remote to an existing project, use the path to the repository as the URL.
+For example, to clone a local repository, you can run something like this:
+
+git clone /srv/git/project.git
+Or you can do this:
+
+git clone file:///srv/git/project.git
+
+To add a local repository to an existing Git project, you can run something like this:
+
+$ git remote add local_proj /srv/git/project.git
+you can push to and pull from that remote via your new remote name local_proj as though you were doing so over a network.
+
+remote repository:
+A remote in Git is a common repository that all team members use to exchange their changes.
+In contrast to a local repository, a remote typically does not provide a file tree of the project's current state. Instead, it only consists of the .git versioning data.
+In case you want to create a blank remote repository, you can use the "git init" command, also with the "--bare" option, on your command line.
+
+
+
+
+
+
+git ecosystem
+
+
+
+
+opensource :
+how is the workflow ?
+eg:get the source code from the original repository i.e. forked it
+after making the changes we patch the change to the original rep It will make send mail to the owner and verify and will be updated back
+
+Version Control System
+
+3 stages of a file:
+committed, modified and  staged
+committed : working directory
+modified: staging area after modifification
+after that it is sent to git rep
+checkout a version from the origin 
+stage fixes for next commit(commit to modified)
+commit changes from index(staging area to git rep)
+git directory: files are committed and recorded to the project as version snapshot
+staging area:
+
+git config --global user.name"username"
+
+git config --global user.email johndoe@example.com
+cd chang working directories
+pwd print working directory
+ls list directories 
+
+install git on Linux
+sudo apt -get install git(debian)
+
+git config -- l: all configuration
+
+core.autocrlf:
+it is set to true: carriage return line code
+it will set it
+git autocrlf=true
+
+git config user.name: gives username
+git help: all commands list
+
+READ ME.md : long description of the project
+.gitignore: 
+
+git push remote origin git_url : specific files to push
+
+git restore --staged <filename>: from the stage mode we can restore file
+even after staging we can revert back
+
+short status codes:
+staged                   modified                file name
+M                                                  file 1
+M                                                  file 2
+A
+                            M 
+?                           ?                      file 3
+
+git diff --staged: committed to the staged
+git status -s/--short: shows the file you have added
+diff --git a/<txtname> b/<txtname>
+git commit -a -m
+git diff --staged --no-renames: renamed files are not shown
+git log -l:details
+git log -oneline:info in oneline
+git rm -cached <txtname>
+
+
+git push origin master(local): this is to push into local server not github
+git log
+git log -l
+git log --oneline      
+git log --stats
+
+git rm file          removes file from rep
+git rm --cached file
+
+git diff flags
+git commit -a -m "a
+git checkout -b new branch: checks out the branch i.e. head will move and work in that branch
+git stash : saves on a stack of unfinished changes that can be reapplied anytime (even on different branch)
+stashing takes the dirty state of your working directory -- 
+git stash show: changes made on the source
+
+Commit - committing is the process which records changes in the repository.
+Think of it as a snapshot of the current status of the project. 
+Commits are done locally.
+
+Push - pushing sends the recent commit history from your local repository up to GitHub.
+If you're the only one working on a repository, pushing is fairly simple.
+If there are others accessing the repository, you may need to pull before you can push.
+
+Pull - a pull grabs any changes from the GitHub repository and merges them into your local repository.
+Sync - syncing is like pulling, but instead of connecting to your GitHub copy of the forked repo, it goes back to the original repository and brings in any changes. 
+Once you've synced your repository, you need to push those changes back to your GitHub account.
+
+Working with Git Branches:
+
+Git Branch Basics:-
+
+Different ways with merging:
+Everyone has their own branch rather than working on the main master.It would be more conflict resolution rather than working on the code.
+
+git add (*/.) -stage the changes
+git commit -m"---" -commit the changes in the branch
+git checkout master -master is now clean and changes are saved in the branch
+

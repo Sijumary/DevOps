@@ -1,0 +1,128 @@
+code <filename.ext> -open code in VS editor.(save in VS editor)
+git init : initialized the git
+the txt file is saved in the branch and then create add something in new text fles.
+Don't commit it yet
+make changes in these files 
+create a branch
+check status.
+ now  commit
+It will be shown in the branch 
+switch back to the master again and the unmodified file is shown in the master
+
+
+
+
+git branch : list the branches that have been created in the master
+dir : shows the files in that branch
+
+branches help you to organize your work
+changes are isolated in each branch
+
+git branch -m <oldbranch> <newbranch> : renaming the branch
+git branch -d <branchname> : deleting the branch
+before committing the branch if you want to delete then use -D as flag to force it to delete it
+git branch -D <branchname>
+
+comparing and merging branches
+
+
+git rebase:
+focuses on end result
+clean up local history.
+increase accuracy
+remove all commits and rebase it to on final commit
+
+
+git merge-base ticket1 master
+git rebase -i <aa8976eb- master id>
+then editor is opened 
+ 
+
+do not rebase on the public branch
+check with team about using rebase
+rebase scenarios:
+clean up history:clean up local history before sharing a branch
+pull without merge:pull changes from a branch into your branch 
+
+squash commits:
+
+
+cherry-pick:
+copy specific commits to another branch
+bugfix for multiple versions of product
+capture commits from inactive branch
+move specific commits to your branch
+- features needed for your ticket
+
+
+cherry-pick is an advanced feature not to be replaced by merge command
+
+command is: git checkout <branchname>
+
+git log <branch name> --oneline: commits in the specific branch
+git cherry-pick <commit no>
+
+
+Remotes:
+locations where project is hosted
+github
+bitbucket
+gitlab
+anywhere
+
+reference for project:
+team milestones
+testing
+code reviews
+
+
+remote URL: <https://look->
+
+git clone <remote -url>: pull code and set up local branch
+origin : default name for remote server
+git remote add <name> <remote-url>:provide name for a remote server
+remote -v
+
+
+pull, push and fetch:
+
+pulling the code from remote to local
+to update the script in the remote we use push
+git fetch is the command that tells your local git to retrieve the latest meta-data info from the original
+git pull on the other hand does that AND brings (copy) those changes from the remote repository.
+
+git fetch: fetching from remote master without reflecting the changes in the local rep
+git merge: now merging with local rep
+git diff master origin/master: difference from local to remote server
+git pull
+
+git diff : changed and not staged for commit
+git diff --cached (git commit):changed and staged for commit
+git diff HEAD  (git commit -a): changed since last commit
+
+git diff <commit>: specific commit and current
+git diff --cached <commit>: specific commit and staged
+git diff <commit> <commit>: difference between 2 commits
+
+* ? ! /[a-zA-Z} : anything one character, etc
+**/bin: matches any directory in repository
+*.zip: *matches any file in the directory
+
+
+git push -u origin <branch name>: pushing a branch into the repository
+
+git stash save "": saving it in stash not in local server
+git statsh list
+git stach apply <stash@{2}>:
+git stach pop: this is popping lifo file
+
+git reset --hard: 
+
+
+
+
+
+
+
+
+
