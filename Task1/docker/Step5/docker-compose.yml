@@ -1,0 +1,10 @@
+version: '3'
+
+services:
+  phpapp:
+    ports:
+      -"8090:80"
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    
