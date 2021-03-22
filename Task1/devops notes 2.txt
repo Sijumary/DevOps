@@ -105,8 +105,8 @@ git diff --cached <commit>: specific commit and staged
 git diff <commit> <commit>: difference between 2 commits
 
 * ? ! /[a-zA-Z} : anything one character, etc
-**/bin: matches any directory in repository
-*.zip: *matches any file in the directory
+**/bin: ** matches any directory in repository
+*.zip: * matches any file in the directory
 
 
 git push -u origin <branch name>: pushing a branch into the repository

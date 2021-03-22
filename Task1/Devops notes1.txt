@@ -17,7 +17,7 @@ creates the second version with the changes
 git diff <version 1 and 2 from log(1st 8 numbers)>: check the difference in the commits(changes) that we have done
 with that we can see the changes i.e :-- shows deleted and ++ shows added lines
 REVERT BACK:
-git checkout<specify the version> : to checkout the version
+git checkout<specify the version> : to checkout the version/branch
 code <code name>: open in vs editor
 
 version control is not backup!!!!!!!
@@ -96,11 +96,11 @@ staging area:
 git config --global user.name"username"
 
 git config --global user.email johndoe@example.com
-cd chang working directories
-pwd print working directory
-ls list directories 
+cd: chang working directories
+pwd: print working directory
+ls: list directories 
 
-install git on Linux
+to install git on Linux
 sudo apt -get install git(debian)
 
 git config -- l: all configuration

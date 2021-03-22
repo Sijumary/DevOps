@@ -1,0 +1,1804 @@
+Getting Started With Kubeadm
+ Step 1 of 6 
+Step 1 - Initialise Master
+Kubeadm has been installed on the nodes. Packages are available for Ubuntu 16.04+, CentOS 7 or HypriotOS v1.0.1+.
+
+The first stage of initialising the cluster is to launch the master node. The master is responsible for running the control plane components, etcd and the API server. Clients will communicate to the API to schedule workloads and manage the state of the cluster.
+
+Task
+The command below will initialise the cluster with a known token to simplify the following
+
+steps.
+
+kubeadm init --token=102952.1a7dd4cc8d1f4cc5 --kubernetes-version $(kubeadm version -o short)
+
+In production, it's recommend to exclude the token causing kubeadm to generate one on your behalf.
+
+To manage the Kubernetes cluster, the client configuration and certificates are required. This configuration is created when kubeadm initialises the cluster. The command copies the configuration to the users home directory and sets the environment variable for use with the CLI.
+
+sudo cp /etc/kubernetes/admin.conf $HOME/
+sudo chown $(id -u):$(id -g) $HOME/admin.conf
+export KUBECONFIG=$HOME/admin.conf
+
+
+
+Step 2 - Deploy Container Networking Interface (CNI)
+The Container Network Interface (CNI) defines how the different nodes and their workloads should communicate. There are multiple network providers available, some are listed here.
+
+Task
+In this scenario we'll use WeaveWorks. The deployment definition can be viewed at cat /opt/weave-kube.yaml
+
+This can be deployed using kubectl apply.
+
+kubectl apply -f /opt/weave-kube.yaml
+
+Weave will now deploy as a series of Pods on the cluster. The status of this can be viewed using the command kubectl get pod -n kube-system
+
+When installing Weave on your cluster, visit https://www.weave.works/docs/net/latest/kube-addon/ for details.
+
+Step 3 - Join Cluster
+Once the Master and CNI has initialised, additional nodes can join the cluster as long as they have the correct token. The tokens can be managed via kubeadm token, for example kubeadm token list.
+
+Task
+On the second node, run the command to join the cluster providing the IP address of the Master node.
+
+kubeadm join --discovery-token-unsafe-skip-ca-verification --token=102952.1a7dd4cc8d1f4cc5 172.17.0.55:6443
+
+This is the same command provided after the Master has been initialised.
+
+The --discovery-token-unsafe-skip-ca-verification tag is used to bypass the Discovery Token verification. As this token is generated dynamically, we couldn't include it within the steps. When in production, use the token provided by kubeadm init.
+
+Step 4 - View Nodes
+The cluster has now been initialised. The Master node will manage the cluster, while our one worker node will run our container workloads.
+
+Task
+The Kubernetes CLI, known as kubectl, can now use the configuration to access the cluster. For example, the command below will return the two nodes in our cluster.
+
+kubectl get nodes
+
+Step 5 - Deploy Pod
+The state of the two nodes in the cluster should now be Ready. This means that our deployments can be scheduled and launched.
+
+Using Kubectl, it's possible to deploy pods. Commands are always issued for the Master with each node only responsible for executing the workloads.
+
+The command below create a Pod based on the Docker Image katacoda/docker-http-server.
+
+kubectl create deployment http --image=katacoda/docker-http-server:latest
+
+The status of the Pod creation can be viewed using kubectl get pods
+
+Once running, you can see the Docker Container running on the node.
+
+docker ps | grep docker-http-server
+
+Step 6 - Deploy Dashboard
+Kubernetes has a web-based dashboard UI giving visibility into the Kubernetes cluster.
+
+Task
+Deploy the dashboard yaml with the command kubectl apply -f dashboard.yaml
+
+The dashboard is deployed into the kube-system namespace. View the status of the deployment with kubectl get pods -n kube-system
+
+A ServiceAccount is required to login. A ClusterRoleBinding is used to assign the new ServiceAccount (admin-user) the role of cluster-admin on the cluster.
+
+cat <<EOF | kubectl create -f - 
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kube-system
+EOF
+This means they can control all aspects of Kubernetes. With ClusterRoleBinding and RBAC, different level of permissions can be defined based on security requirements. More information on creating a user for the Dashboard can be found in the Dashboard documentation.
+
+Once the ServiceAccount has been created, the token to login can be found with:
+
+kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep admin-user | awk '{print $1}')
+
+When the dashboard was deployed, it used externalIPs to bind the service to port 8443. This makes the dashboard available to outside of the cluster and viewable at https://2886795323-8443-ollie07.environments.katacoda.com/
+
+Use the admin-user token to access the dashboard.
+
+For production, instead of externalIPs, it's recommended to use kubectl proxy to access the dashboard. See more details at https://github.com/kubernetes/dashboard.
+
+Start containers using Kubectl
+ Step 1 of 5 
+Step 1 - Launch Cluster
+To start we need to launch a Kubernetes cluster.
+
+Execute the command below to start the cluster components and download the Kubectl CLI.
+
+minikube start --wait=false
+
+Wait for the Node to become Ready by checking kubectl get nodes
+
+Step 2 - Kubectl Run
+The run command creates a deployment based on the parameters specified, such as the image or replicas. This deployment is issued to the Kubernetes master which launches the Pods and containers required. Kubectl run_ is similar to docker run but at a cluster level.
+
+The format of the command is kubectl run <name of deployment> <properties>
+
+Task
+The following command will launch a deployment called http which will start a container based on the Docker Image katacoda/docker-http-server:latest.
+
+kubectl run http --image=katacoda/docker-http-server:latest --replicas=1
+
+You can then use kubectl to view the status of the deployments
+
+kubectl get deployments
+
+To find out what Kubernetes created you can describe the deployment process.
+
+kubectl describe deployment http
+
+The description includes how many replicas are available, labels specified and the events associated with the deployment. These events will highlight any problems and errors that might have occurred.
+
+In the next step we'll expose the running service.
+
+Step 3 - Kubectl Expose
+With the deployment created, we can use kubectl to create a service which exposes the Pods on a particular port.
+
+Expose the newly deployed http deployment via kubectl expose. The command allows you to define the different parameters of the service and how to expose the deployment.
+
+Task
+Use the following command to expose the container port 80 on the host 8000 binding to the external-ip of the host.
+
+kubectl expose deployment http --external-ip="172.17.0.60" --port=8000 --target-port=80
+
+You will then be able to ping the host and see the result from the HTTP service.
+
+curl http://172.17.0.60:8000
+
+Step 4 - Kubectl Run and Expose
+With kubectl run it's possible to create the deployment and expose it as a single command.
+
+Task
+Use the command command to create a second http service exposed on port 8001.
+
+kubectl run httpexposed --image=katacoda/docker-http-server:latest --replicas=1 --port=80 --hostport=8001
+
+You should be able to access it using curl http://172.17.0.60:8001
+
+Under the covers, this exposes the Pod via Docker Port Mapping. As a result, you will not see the service listed using kubectl get svc
+
+To find the details you can use docker ps | grep httpexposed
+
+Pause Containers
+Running the above command you'll notice the ports are exposed on the Pod, not the http container itself. The Pause container is responsible for defining the network for the Pod. Other containers in the pod share the same network namespace. This improves network performance and allow multiple containers to communicate over the same network interface..
+
+Step 5 - Scale Containers
+With our deployment running we can now use kubectl to scale the number of replicas.
+
+Scaling the deployment will request Kubernetes to launch additional Pods. These Pods will then automatically be load balanced using the exposed Service.
+
+Task
+The command kubectl scale allows us to adjust the number of Pods running for a particular deployment or replication controller.
+
+kubectl scale --replicas=3 deployment http
+
+Listing all the pods, you should see three running for the http deployment kubectl get pods
+
+Once each Pod starts it will be added to the load balancer service. By describing the service you can view the endpoint and the associated Pods which are included.
+
+kubectl describe svc http
+
+Making requests to the service will request in different nodes processing the request.
+
+curl http://172.17.0.60:8000
+
+Deploy Containers Using YAML
+ Step 1 of 3 
+Step 1 - Create Deployment
+One of the most common Kubernetes object is the deployment object. The deployment object defines the container spec required, along with the name and labels used by other parts of Kubernetes to discover and connect to the application.
+
+Task
+Copy the following definition to the editor. The definition defines how to launch an application called webapp1 using the Docker Image katacoda/docker-http-server that runs on Port 80
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webapp1
+  template:
+    metadata:
+      labels:
+        app: webapp1
+    spec:
+      containers:
+      - name: webapp1
+        image: katacoda/docker-http-server:latest
+        ports:
+        - containerPort: 80
+This is deployed to the cluster with the command kubectl create -f deployment.yaml
+
+As it's a Deployment object, a list of all the deployed objects can be obtained via kubectl get deployment
+
+Details of individual deployments can be outputted with kubectl describe deployment webapp1
+
+Step 2 - Create Service
+Kubernetes has powerful networking capabilities that control how applications communicate. These networking configurations can also be controlled via YAML.
+
+Task
+Copy the Service definition to the editor. The Service selects all applications with the label webapp1. As multiple replicas, or instances, are deployed, they will be automatically load balanced based on this common label. The Service makes the application available via a NodePort.
+
+Copy to EditorapiVersion: v1
+kind: Service
+metadata:
+  name: webapp1-svc
+  labels:
+    app: webapp1
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    nodePort: 30080
+  selector:
+    app: webapp1
+All Kubernetes objects are deployed in a consistent way using kubectl.
+
+Deploy the Service with kubectl create -f service.yaml
+
+As before, details of all the Service objects deployed with kubectl get svc. By describing the object it's possible to discover more details about the configuration kubectl describe svc webapp1-svc.
+
+curl host01:30080
+
+Step 3 - Scale Deployment
+Details of the YAML can be changed as different configurations are required for deployment. This follows an infrastructure as code mindset. The manifests should be kept under source control and used to ensure that the configuration in production matches the configuration in source control.
+
+Task
+Update the deployment.yaml file to increase the number of instances running. For example, the file should look like this:
+
+replicas: 4
+Updates to existing definitions are applied using kubectl apply. To scale the number of replicas, deploy the updated YAML file using kubectl apply -f deployment.yaml
+
+Instantly, the desired state of our cluster has been updated, viewable with kubectl get deployment
+
+Additional Pods will be scheduled to match the request. kubectl get pods
+
+As all the Pods have the same label selector, they'll be load balanced behind the Service NodePort deployed.
+
+Issuing requests to the port will result in different containers processing the request curl host01:30080
+
+Additional Kubernetes Networking details and Object Definitions will will be covered in future scenarios.
+
+Deploy Guestbook example on Kubernetes
+ Step 1 of 8 
+Step 1 - Start Kubernetes
+To start we need a running Kubernetes cluster. The details of this are explained in the Launch Kubernetes cluster scenario.
+
+Task
+Start a single-node cluster using the helper script. The helper script will launch the API, Master, a Proxy and DNS discovery. The Web App uses DNS Discovery to find the Redis slave to store data.
+
+launch.sh
+Health Check
+Check everything is up using the following health Check: kubectl cluster-info
+kubectl get nodes
+
+If the node returns NotReady then it is still waiting. Wait a couple of seconds before retrying.
+
+Step 2 - Redis Master Controller
+The first stage of launching the application is to start the Redis Master. A Kubernetes service deployment has, at least, two parts. A replication controller and a service.
+
+The replication controller defines how many instances should be running, the Docker Image to use, and a name to identify the service. Additional options can be utilized for configuration and discovery. Use the editor above to view the YAML definition.
+
+If Redis were to go down, the replication controller would restart it on an active node.
+
+Create Replication Controller
+In this example, the YAML defines a redis server called redis-master using the official redis running port 6379.
+
+The kubectl create command takes a YAML definition and instructs the master to start the controller.
+
+kubectl create -f redis-master-controller.yaml
+
+What's running?
+The above command created a Replication Controller. The Replication
+
+kubectl get rc
+
+All containers described as Pods. A pod is a collection of containers that makes up a particular application, for example Redis. You can view this using kubectl
+
+kubectl get pods
+
+Step 3 - Redis Master Service
+The second part is a service. A Kubernetes service is a named load balancer that proxies traffic to one or more containers. The proxy works even if the containers are on different nodes.
+
+Services proxy communicate within the cluster and rarely expose ports to an outside interface.
+
+When you launch a service it looks like you cannot connect using curl or netcat unless you start it as part of Kubernetes. The recommended approach is to have a LoadBalancer service to handle external communications.
+
+Create Service
+The YAML defines the name of the replication controller, redis-master, and the ports which should be proxied.
+
+kubectl create -f redis-master-service.yaml
+
+List & Describe Services
+kubectl get services
+
+kubectl describe services redis-master
+
+Step 4 - Replication Slave Pods
+In this example we'll be running Redis Slaves which will have replicated data from the master. More details of Redis replication can be found at http://redis.io/topics/replication
+
+As previously described, the controller defines how the service runs. In this example we need to determine how the service discovers the other pods. The YAML represents the GET_HOSTS_FROM property as DNS. You can change it to use Environment variables in the yaml but this introduces creation-order dependencies as the service needs to be running for the environment variable to be defined.
+
+Start Redis Slave Controller
+In this case, we'll be launching two instances of the pod using the image kubernetes/redis-slave:v2. It will link to redis-master via DNS.
+
+kubectl create -f redis-slave-controller.yaml
+
+List Replication Controllers
+kubectl get rc
+Step 5 - Redis Slave Service
+As before we need to make our slaves accessible to incoming requests. This is done by starting a service which knows how to communicate with redis-slave.
+
+Because we have two replicated pods the service will also provide load balancing between the two nodes.
+
+Start Redis Slave Service
+kubectl create -f redis-slave-service.yaml
+
+kubectl get services
+
+Step 6 - Frontend Replicated Pods
+With the data services started we can now deploy the web application. The pattern of deploying a web application is the same as the pods we've deployed before.
+
+Launch Frontend
+The YAML defines a service called frontend that uses the image _gcr.io/googlesamples/gb-frontend:v3. The replication controller will ensure that three pods will always exist.
+
+kubectl create -f frontend-controller.yaml
+
+List controllers and pods
+kubectl get rc
+
+kubectl get pods
+
+PHP Code
+The PHP code uses HTTP and JSON to communicate with Redis. When setting a value requests go to redis-master while read data comes from the redis-slave nodes.
+
+Step 7 - Guestbook Frontend Service
+To make the frontend accessible we need to start a service to configure the proxy.
+
+Start Proxy
+The YAML defines the service as a NodePort. NodePort allows you to set well-known ports that are shared across your entire cluster. This is like -p 80:80 in Docker.
+
+In this case, we define our web app is running on port 80 but we'll expose the service on 30080.
+
+kubectl create -f frontend-service.yaml
+
+kubectl get services
+
+We'll discuss NodePort in future scenarios.
+
+Step 8 - Access Guestbook Frontend
+With all controllers and services defined Kubernetes will start launching them as Pods. A pod can have different states depending on what's happening. For example, if the Docker Image is still being downloaded then the Pod will have a pending state as it's not able to launch. Once ready the status will change to running.
+
+View Pods Status
+You can view the status using the following command:
+
+kubectl get pods
+
+Find NodePort
+If you didn't assign a well-known NodePort then Kubernetes will assign an available port randomly. You can find the assigned NodePort using kubectl.
+
+kubectl describe service frontend | grep NodePort
+
+View UI
+Once the Pod is in running state you will be able to view the UI via port 30080. Use the URL to view the page https://2886795323-30080-simba11.environments.katacoda.com
+
+Under the covers the PHP service is discovering the Redis instances via DNS. You now have a working multi-tier application deployed on Kubernetes.
+
+Networking Introduction
+ Step 1 of 5 
+Step 1 - Cluster IP
+Cluster IP is the default approach when creating a Kubernetes Service. The service is allocated an internal IP that other components can use to access the pods.
+
+By having a single IP address it enables the service to be load balanced across multiple Pods.
+
+Services are deployed via kubectl apply -f clusterip.yaml.
+
+The definition can be viewed at cat clusterip.yaml
+This will deploy a web app with two replicas to showcase load balancing along with a service. The Pods can be viewed at kubectl get pods
+
+It will also deploy a service. kubectl get svc
+
+More details on the service configuration and active endpoints (Pods) can be viewed via kubectl describe svc/webapp1-clusterip-svc
+
+After deploying, the service can be accessed via the ClusterIP allocated.
+
+export CLUSTER_IP=$(kubectl get services/webapp1-clusterip-svc -o go-template='{{(index .spec.clusterIP)}}')
+echo CLUSTER_IP=$CLUSTER_IP
+curl $CLUSTER_IP:80
+
+Multiple requests will showcase how the service load balancers across multiple Pods based on the common label selector.
+
+curl $CLUSTER_IP:80
+
+Step 2 - Target Port
+Target ports allows us to separate the port the service is available on from the port the application is listening on. TargetPort is the Port which the application is configured to listen on. Port is how the application will be accessed from the outside.
+
+Similar to previously, the service and extra pods are deployed via kubectl apply -f clusterip-target.yaml
+
+The following commands will create the service.
+
+cat clusterip-target.yaml
+
+kubectl get svc
+
+kubectl describe svc/webapp1-clusterip-targetport-svc
+
+After the service and pods have deployed, it can be accessed via the cluster IP as before, but this time on the defined port 8080.
+
+export CLUSTER_IP=$(kubectl get services/webapp1-clusterip-targetport-svc -o go-template='{{(index .spec.clusterIP)}}')
+echo CLUSTER_IP=$CLUSTER_IP
+curl $CLUSTER_IP:8080
+
+curl $CLUSTER_IP:8080
+
+The application itself is still configured to listen on port 80. Kubernetes Service manages the translation between the two.
+Step 3 - NodePort
+While TargetPort and ClusterIP make it available to inside the cluster, the NodePort exposes the service on each Node’s IP via the defined static port. No matter which Node within the cluster is accessed, the service will be reachable based on the port number defined.
+
+kubectl apply -f nodeport.yaml
+
+When viewing the service definition, notice the additional type and NodePort property defined cat nodeport.yaml
+
+kubectl get svc
+
+kubectl describe svc/webapp1-nodeport-svc
+
+The service can now be reached via the Node's IP address on the NodePort defined.
+
+curl 172.17.0.62:30080
+
+Step 4 - External IPs
+Another approach to making a service available outside of the cluster is via External IP addresses.
+
+Update the definition to the current cluster's IP address with sed -i 's/HOSTIP/172.17.0.62/g' externalip.yaml
+
+cat externalip.yaml
+
+kubectl apply -f externalip.yaml
+
+kubectl get svc
+
+kubectl describe svc/webapp1-externalip-svc
+
+The service is now bound to the IP address and Port 80 of the master node.
+
+curl 172.17.0.62
+
+Step 5 - Load Balancer
+When running in the cloud, such as EC2 or Azure, it's possible to configure and assign a Public IP address issued via the cloud provider. This will be issued via a Load Balancer such as ELB. This allows additional public IP addresses to be allocated to a Kubernetes cluster without interacting directly with the cloud provider.
+
+As Katacoda is not a cloud provider, it's still possible to dynamically allocate IP addresses to LoadBalancer type services. This is done by deploying the Cloud Provider using kubectl apply -f cloudprovider.yaml. When running in a service provided by a Cloud Provider this is not required.
+
+When a service requests a Load Balancer, the provider will allocate one from the 10.10.0.0/26 range defined in the configuration.
+
+kubectl get pods -n kube-system
+
+kubectl apply -f loadbalancer.yaml
+
+The service is configured via a Load Balancer as defined in cat loadbalancer.yaml
+
+While the IP address is being defined, the service will show Pending. When allocated, it will appear in the service list.
+
+kubectl get svc
+
+kubectl describe svc/webapp1-loadbalancer-svc
+
+The service can now be accessed via the IP address assigned, in this case from the 10.10.0.0/26 range.
+
+export LoadBalancerIP=$(kubectl get services/webapp1-loadbalancer-svc -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
+echo LoadBalancerIP=$LoadBalancerIP
+curl $LoadBalancerIP
+
+curl $LoadBalancerIP
+
+Create Ingress Routing
+ Step 1 of 4 
+Step 1 - Create Deployment
+To start, deploy an example HTTP server that will be the target of our requests. The deployment contains three deployments, one called webapp1 and a second called webapp2, and a third called webapp3 with a service for each.
+
+cat deployment.yaml
+
+Task
+Deploy the definitions with kubectl apply -f deployment.yaml
+The status can be viewed with kubectl get deployment
+Step 2 - Deploy Ingress
+The YAML file ingress.yaml defines a Nginx-based Ingress controller together with a service making it available on Port 80 to external connections using ExternalIPs. If the Kubernetes cluster was running on a cloud provider then it would use a LoadBalancer service type.
+
+The ServiceAccount defines the account with a set of permissions on how to access the cluster to access the defined Ingress Rules. The default server secret is a self-signed certificate for other Nginx example SSL connections and is required by the Nginx Default Example.
+
+cat ingress.yaml
+
+Task
+The Ingress controllers are deployed in a familiar fashion to other Kubernetes objects with kubectl create -f ingress.yaml
+
+The status can be identified using kubectl get deployment -n nginx-ingress
+Step 3 - Deploy Ingress Rules
+Ingress rules are an object type with Kubernetes. The rules can be based on a request host (domain), or the path of the request, or a combination of both.
+
+An example set of rules are defined within cat ingress-rules.yaml
+
+The important parts of the rules are defined below.
+
+The rules apply to requests for the host my.kubernetes.example. Two rules are defined based on the path request with a single catch all definition. Requests to the path /webapp1 are forwarded onto the service webapp1-svc. Likewise, the requests to /webapp2 are forwarded to webapp2-svc. If no rules apply, webapp3-svc will be used.
+
+This demonstrates how an application's URL structure can behave independently about how the applications are deployed.
+
+- host: my.kubernetes.example
+  http:
+    paths:
+    - path: /webapp1
+      backend:
+        serviceName: webapp1-svc
+        servicePort: 80
+    - path: /webapp2
+      backend:
+        serviceName: webapp2-svc
+        servicePort: 80
+    - backend:
+        serviceName: webapp3-svc
+        servicePort: 80
+
+Task
+As with all Kubernetes objects, they can be deployed via kubectl create -f ingress-rules.yaml
+
+Once deployed, the status of all the Ingress rules can be discovered via kubectl get ing
+Step 4 - Test
+With the Ingress rules applied, the traffic will be routed to the defined place.
+
+The first request will be processed by the webapp1 deployment.
+
+curl -H "Host: my.kubernetes.example" 172.17.0.36/webapp1
+
+The second request will be processed by the webapp2 deployment.
+
+curl -H "Host: my.kubernetes.example" 172.17.0.36/webapp2
+
+Finally, all other requests will be processed by webapp3 deployment.
+
+curl -H "Host: my.kubernetes.example" 172.17.0.36
+
+Liveness and Readiness Healthchecks
+ Step 1 of 3 
+Step 1 - Launch Cluster
+To start, we need to launch a Kubernetes cluster.
+
+Execute the command below to start the cluster components and download the Kubectl CLI.
+
+launch.sh
+
+After the cluster has started, deploy the demo application with kubectl apply -f deploy.yaml
+Step 2 - Readiness Probe
+When deploying the cluster, two pods were also deployed to demonstrate health checking. You can view the deployment with cat deploy.yaml.
+
+When deploying the Replication Controller, each Pod has a Readiness and Liveness check. Each check has the following format for performing a healthcheck over HTTP.
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 1
+  timeoutSeconds: 1
+The settings can be changed to call different endpoints, for example, /ping, based on your application.
+
+Get Status
+The first Pod, bad-frontend is an HTTP service which always returns a 500 error indicating it hasn't started correctly. You can view the status of the Pod with kubectl get pods --selector="name=bad-frontend"
+
+Kubectl will return the Pods deployed with our particular label. Because the healthcheck is failing, it will say that zero containers are ready. It will also indicate the number of restart attempts of the container.
+
+To find out more details of why it's failing, describe the Pod.
+
+pod=$(kubectl get pods --selector="name=bad-frontend" --output=jsonpath={.items..metadata.name})
+kubectl describe pod $pod
+
+Readiness OK
+Our second Pod, frontend, returns an OK status on launch.
+
+kubectl get pods --selector="name=frontend"
+
+Step 3 - Liveness Probe
+With our second Pod currently running in a health state, we can simulate a failure occurring.
+
+At present, no crashes should have occurred. kubectl get pods --selector="name=frontend"
+
+Crash Service
+The HTTP server has an additional endpoint that will cause it to return 500 errors. Using kubectl exec it's possible to call the endpoint.
+
+pod=$(kubectl get pods --selector="name=frontend" --output=jsonpath={.items..metadata.name})
+kubectl exec $pod -- /usr/bin/curl -s localhost/unhealthy
+
+Liveness
+Based on the configuration, Kubernetes will execute the Liveness Probe. If the Probe fails, Kubernetes will destroy and re-create the failed container. Execute the above command to crash the service and watch Kubernetes recover it automatically.
+
+kubectl get pods --selector="name=frontend"
+
+The check may take a few moments to detect.
+
+
+
+Kubectl run_ is similar to docker run but at a cluster level.
+
+The format of the command is kubectl run <name of deployment> <properties>
+
+
+
+The command kubectl scale allows us to adjust the number of Pods running for a particular deployment or replication controller.
+
+kubectl scale --replicas=3 deployment http
+
+Listing all the pods, you should see three running for the http deployment kubectl get pods
+
+
+
+The helper script will launch the API, Master, a Proxy and DNS discovery. The Web App uses DNS Discovery to find the Redis slave to store data.
+
+launch.sh
+
+Health Check
+Check everything is up using the following health Check: kubectl cluster-info
+kubectl get nodes
+
+
+
+
+
+Step 1 - Launch Cluster
+To start, we need to launch a Kubernetes cluster.
+
+Execute the command below to start the cluster components and download the Kubectl CLI.
+
+launch.sh
+
+After the cluster has started, deploy the demo application with kubectl apply -f deploy.yaml
+
+
+Step 2 - Readiness Probe
+When deploying the cluster, two pods were also deployed to demonstrate health checking. You can view the deployment with cat deploy.yaml.
+
+When deploying the Replication Controller, each Pod has a Readiness and Liveness check. Each check has the following format for performing a healthcheck over HTTP.
+
+livenessProbe:
+httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 1
+  timeoutSeconds: 1
+The settings can be changed to call different endpoints, for example, /ping, based on your application.
+
+Get Status
+The first Pod, bad-frontend is an HTTP service which always returns a 500 error indicating it hasn't started correctly. You can view the statusof the Pod with kubectl get pods --selector="name=bad-frontend"
+
+Kubectl will return the Pods deployed with our particular label. Because the healthcheck is failing, it will say that zero containers are ready. It will also indicate the number of restart attempts of the container.
+
+To find out more details of why it's failing, describe the Pod.
+
+pod=$(kubectl get pods --selector="name=bad-frontend" --output=jsonpath={.items..metadata.name})
+kubectl describe pod $pod
+
+Readiness OK
+Our second Pod, frontend, returns an OK status on launch.
+
+kubectl get pods --selector="name=frontend"
+
+
+
+
+Step 3 - Liveness Probe
+With our second Pod currently running in a health state, we can simulate a failure occurring.
+
+At present, no crashes should have occurred. kubectl get pods --selector="name=frontend"
+
+Crash Service
+The HTTP server has an additional endpoint that will cause it to return 500 errors. Usingkubectl exec it's possible to call the endpoint.
+
+pod=$(kubectl get pods --selector="name=frontend" --output=jsonpath={.items..metadata.name})
+kubectl exec $pod -- /usr/bin/curl -s localhost/unhealthy
+
+Liveness
+Based on the configuration, Kubernetes will execute the Liveness Probe. If the Probe fails, Kubernetes will destroy and re-create thethe failed container. Execute the above command to crash the service and watch Kubernetes recover it automatically.
+
+kubectl get pods --selector="name=frontend"
+
+The check may take a few moments to detect.
+
+
+
+
+
+
+Step 1 - Initialise Master
+Kubeadm has been installed on the nodes. Packages are available for Ubuntu 16.04+, CentOS 7 or HypriotOS v1.0.1+.
+
+The first stage of initialising the cluster is to launch the master node. The master is responsible for running the control plane components, etcd and the API server. Clients will communicate to the API to schedule workloads and manage the state of the cluster.
+
+Task
+The following will use CRI-O, a lightweight container runtime for Kubernetes. There is currently a bug meaning that CRI-O needs to be restarted before beginning. Execute the workaround with systemctl restart crio
+
+The command below will initialise the cluster with a known token to simplify the following steps. The command points to an alternative Container Runtime Interface (CRI), in this case, CRI-O.
+
+kubeadm init --cri-socket=/var/run/crio/crio.sock --kubernetes-version $(kubeadm version -o short)
+
+In production, it's recommend to exclude the token causing kubeadm to generate one on your behalf.
+
+Notice, there are no Docker containers running.
+
+docker ps
+
+Instead, everything is managed via CRI-O. The status of which can be explored via crictl
+
+crictl images
+crictl ps
+
+Because CRI-O is built for Kubernetes it means there are no Pause containers. This is just one of the many advantages of having a container runtime designed for Kubernetes.
+
+By default, the crictl CLI is configured to communicate with the runtime by the config file at cat /etc/crictl.yaml
+
+
+Step 2 - View Nodes
+The cluster has now been initialised. The Master node will manage the cluster, while our one worker node will run our container workloads.
+
+Task
+To manage the Kubernetes cluster, the client configuration and certificates are required. This configuration is created when kubeadm initialises the cluster. The command copies the configuration to the users home directory and sets the environment variable for use with the CLI.
+
+sudo cp /etc/kubernetes/admin.conf $HOME/
+sudo chown $(id -u):$(id -g) $HOME/admin.conf
+export KUBECONFIG=$HOME/admin.conf
+The Kubernetes CLI, known as kubectl, can now use the configuration to access the cluster. For example, the command below will return the two nodes in our cluster.
+
+kubectl get nodes
+
+We can verify the Container Runtime used by describing the node.
+
+kubectl describe node master01  | grep "Container Runtime Version:"
+
+Step 3 - Taint Master
+In this scenario a single node has been provisioned. Remove the taint to deploy applications to the Master node.
+
+kubectl taint nodes --all node-role.kubernetes.io/master-
+
+Kubernetes has abstract away the underlying Container runtime meaning the commands behave as expected.
+
+kubectl get pods --all-namespaces
+
+Step 4 - Deploy Container Networking Interface (CNI)
+The Container Network Interface (CNI) defines how the different nodes and their workloads should communicate. There are multiple network providers available, some are listed here.
+
+Task
+In this scenario we'll use WeaveWorks. The deployment definition can be viewed at cat /opt/weave-kube.yaml
+
+This can be deployed using kubectl apply.
+
+kubectl apply -f /opt/weave-kube.yaml
+
+Weave will now deploy as a series of Pods on the cluster. The status of this can be viewed using the command kubectl get pod -n kube-system
+
+When installing Weave on your cluster, visit https://www.weave.works/docs/net/latest/kube-addon/ for details.
+
+Step 5 - Deploy Pod
+The state of the two nodes in the cluster should now be Ready. This means that our deployments can be scheduled and launched.
+
+Using Kubectl, it's possible to deploy pods. Commands are always issued for the Master with each node only responsible for executing the workloads.
+
+The command below create a Pod based on the Docker Image katacoda/docker-http-server.
+
+kubectl run http --image=katacoda/docker-http-server:latest --replicas=1
+
+The status of the Pod creation can be viewed using kubectl get pods
+
+You will notice this is ImageInspectError. This is expected. This is because all images need to be prefixed with the Container Image Registry, such as docker.io for the Docker Hub.
+
+Fix the problem by chaging the image to include the Registry URL.
+
+kubectl set image deployment/http http=docker.io/katacoda/docker-http-server:latest
+
+Because we Tainted the master, once running, you can see the Container running on the master node.
+
+crictl ps | grep docker-http-server
+
+
+Step 6 - Deploy Dashboard
+Kubernetes has a web-based dashboard UI giving visibility into the Kubernetes cluster.
+
+Task
+Deploy the dashboard yaml with the command kubectl apply -f dashboard.yaml
+
+The dashboard is deployed into the kube-system namespace. View the status of the deployment with kubectl get pods -n kube-system
+
+When the dashboard was deployed, it was assigned a NodePort of 30000. This makes the dashboard available to outside of the cluster and viewable at https://2886795280-30000-kitek02.environments.katacoda.com/
+
+For your cluster, the dashboard yaml definition can be downloaded from https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml.
+
+
+RUNNING STATEFUL SERVICES ON KUBERNETES
+
+Step 1 - Deploy NFS Server
+NFS is a protocol that allows nodes to read/write data over a network. The protocol works by having a master node running the NFS daemon and stores the data. This master node makes certain directories available over the network.
+
+Clients access the masters shared via drive mounts. From the viewpoint of applications, they are writing to the local disk. Under the covers, the NFS protocol writes it to the master.
+
+Task
+In this scenario, and for demonstration and learning purposes, the role of the NFS Server is handled by a customised container. The container makes directories available via NFS and stores the data inside the container. In production, it is recommended to configure a dedicated NFS Server.
+
+Start the NFS using the command docker run -d --net=host \
+   --privileged --name nfs-server \
+   katacoda/contained-nfs-server:centos7 \
+   /exports/data-0001 /exports/data-0002
+
+The NFS server exposes two directories, data-0001 and data-0002. In the next steps, this is used to store data.
+
+
+
+Step 2 - Deploy Persistent Volume
+For Kubernetes to understand the available NFS shares, it requires a PersistentVolume configuration. The PersistentVolume supports different protocols for storing data, such as AWS EBS volumes, GCE storage, OpenStack Cinder, Glusterfs and NFS. The configuration provides an abstraction between storage and API allowing for a consistent experience.
+
+In the case of NFS, one PersistentVolume relates to one NFS directory. When a container has finished with the volume, the data can either be Retained for future use or the volume can be Recycled meaning all the data is deleted. The policy is defined by the persistentVolumeReclaimPolicy option.
+
+For structure is:
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: <friendly-name>
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    server: <server-name>
+    path: <shared-path>
+The spec defines additional metadata about the persistent volume, including how much space is available and if it has read/write access.
+
+Task
+Create two new PersistentVolume definitions to point at the two available NFS shares.
+
+kubectl create -f nfs-0001.yaml
+
+kubectl create -f nfs-0002.yaml
+
+View the contents of the files using cat nfs-0001.yaml nfs-0002.yaml
+
+Once created, view all PersistentVolumes in the cluster using kubectl get pv
+
+Step 3 - Deploy Persistent Volume Claim
+Once a Persistent Volume is available, applications can claim the volume for their use. The claim is designed to stop applications accidentally writing to the same volume and causing conflicts and data corruption.
+
+The claim specifies the requirements for a volume. This includes read/write access and storage space required. An example is as follows:
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: claim-mysql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+Task
+Create two claims for two different applications. A MySQL Pod will use one claim, the other used by an HTTP server.
+
+kubectl create -f pvc-mysql.yaml
+
+kubectl create -f pvc-http.yaml
+
+View the contents of the files using cat pvc-mysql.yaml pvc-http.yaml
+
+Once created, view all PersistentVolumesClaims in the cluster using kubectl get pvc.
+
+The claim will output which Volume the claim is mapped to.
+
+
+Step 4 - Use Volume
+When a deployment is defined, it can assign itself to a previous claim. The following snippet defines a volume mount for the directory /var/lib/mysql/data which is mapped to the storage mysql-persistent-storage. The storage called mysql-persistent-storage is mapped to the claim called claim-mysql.
+
+  spec:
+      volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql/data
+  volumes:
+    - name: mysql-persistent-storage
+      persistentVolumeClaim:
+        claimName: claim-mysql
+Task
+Launch two new Pods with Persistent Volume Claims. Volumes are mapped to the correct directory when the Pods start allowing applications to read/write as if it was a local directory.
+
+kubectl create -f pod-mysql.yaml
+
+kubectl create -f pod-www.yaml
+
+Use the command below to view the definition of the Pods.
+
+cat pod-mysql.yaml pod-www.yaml
+
+You can see the status of the Pods starting using kubectl get pods
+
+If a Persistent Volume Claim is not assigned to a Persistent Volume, then the Pod will be in Pending mode until it becomes available. In the next step, we'll read/write data to the volume.
+
+Step 5 - Read/Write Data
+Our Pods can now read/write. MySQL will store all database changes to the NFS Server while the HTTP Server will serve static from the NFS drive. When upgrading, restarting or moving containers to a different machine the data will still be accessible.
+
+To test the HTTP server, write a 'Hello World' index.html homepage. In this scenario, we know the HTTP directory will be based on data-0001 as the volume definition hasn't driven enough space to satisfy the MySQL size requirement.
+
+docker exec -it nfs-server bash -c "echo 'Hello World' > /exports/data-0001/index.html"
+
+Based on the IP of the Pod, when accessing the Pod, it should return the expected response.
+
+ip=$(kubectl get pod www -o yaml |grep podIP | awk '{split($0,a,":"); print a[2]}'); echo $ip
+
+curl $ip
+
+Update Data
+When the data on the NFS share changes, then the Pod will read the newly updated data.
+
+docker exec -it nfs-server bash -c "echo 'Hello NFS World' > /exports/data-0001/index.html"
+
+curl $ip
+
+
+Step 6 - Recreate Pod
+Because a remote NFS server stores the data, if the Pod or the Host were to go down, then the data will still be available.
+
+Task
+Deleting a Pod will cause it to remove claims to any persistent volumes. New Pods can pick up and re-use the NFS share.
+
+kubectl delete pod www
+
+kubectl create -f pod-www2.yaml
+
+ip=$(kubectl get pod www2 -o yaml |grep podIP | awk '{split($0,a,":"); print a[2]}'); curl $ip
+
+The applications now use a remote NFS for their data storage. Depending on requirements, this same approach works with other storage engines such as GlusterFS, AWS EBS, GCE storage or OpenStack Cinder.
+
+
+
+Use Kubernetes to manage Secrets
+ Step 1 of 4 
+Step 1 - Start Kubernetes
+To start we need to launch a Kubernetes cluster.
+
+Execute the command below to start the cluster components and download the Kubectl CLI.
+
+launch.sh
+
+Step 2 - Create Secrets
+Kubernetes requires secrets to be encoded as Base64 strings.
+
+Using the command line tool we can create the Base64 strings and store them as variables to use in a file. username=$(echo -n "admin" | base64)
+password=$(echo -n "a62fjbd37942dcs" | base64)
+
+The secret is defined using yaml. Below we'd using the variables defined above and providing them with friendly labels which our application can use. This will create a collection of key/value secrets that can be accessed via the name, in this case test-secret
+
+echo "apiVersion: v1
+kind: Secret
+metadata:
+  name: test-secret
+type: Opaque
+data:
+  username: $username
+  password: $password" >> secret.yaml
+
+This yaml file can be used to with Kubectl to create our secret. When launching pods that require access to the secret we'll refer to the collection via the friendly-name.
+
+Task: Create the secret
+Use kubectl to create our secret.
+
+kubectl create -f secret.yaml
+
+The following command allows you to view all the secret collections defined.
+
+kubectl get secrets
+
+In the next step we'll use these secrets via a Pod.
+
+Step 3 - Consume via Environment Variables
+In the file secret-env.yaml we've defined a Pod which has environment variables populated from the previously created secret.
+
+View the file using cat secret-env.yaml
+
+To populate the environment variable we define the name, in this case SECRET_USERNAME, along with the name of the secrets collection and the key which containers the data.
+
+The structure looks like this:
+
+- name: SECRET_USERNAME
+valueFrom:
+ secretKeyRef:
+   name: test-secret
+   key: username
+Task
+Launch the Pod using kubectl create -f secret-env.yaml
+
+Once the Pod started, you output the populated environment variables. kubectl exec -it secret-env-pod env | grep SECRET_
+
+Kubernetes decodes the base64 value when populating the environment variables. You should see the original username/password combination we defined. These variables can now be used for accessing APIs, Databases etc.
+
+You can check the status of a Pod using kubectl get pods.
+
+In the next step we'll mount the secrets as files.
+
+Step 4 - Consume via Volumes
+The use of environment variables for storing secrets in memory can result in them accidentally leaking. The recommend approach is to use mount them as a Volume.
+
+The Pod specification can be viewed using cat secret-pod.yaml.
+
+To mount the secrets as volumes we first define a volume with a well-known name, in this case, secret-volume, and provide it with our stored secret.
+
+volumes:
+ - name: secret-volume
+   secret:
+     secretName: test-secret
+When we define the container we mount our created volume to a particular directory. Applications will read the secrets as files from this path.
+
+volumeMounts:
+ - name: secret-volume
+   mountPath: /etc/secret-volume
+Task
+Create our new Pod using kubectl create -f secret-pod.yaml
+
+Once started you can interact with the mounted secrets. For example, you can list all the secrets available as if they're regular data. For example kubectl exec -it secret-vol-pod ls /etc/secret-volume
+
+Reading the files allows us to access the decoded secret value. To access username we'd use kubectl exec -it secret-vol-pod cat /etc/secret-volume/username
+
+For the password, we'd read the password file kubectl exec -it secret-vol-pod cat /etc/secret-volume/password
+
+Step 4 - Consume via Volumes
+The use of environment variables for storing secrets in memory can result in them accidentally leaking. The recommend approach is to use mount them as a Volume.
+
+The Pod specification can be viewed using cat secret-pod.yaml.
+
+To mount the secrets as volumes we first define a volume with a well-known name, in this case, secret-volume, and provide it with our stored secret.
+
+volumes:
+ - name: secret-volume
+   secret:
+     secretName: test-secret
+When we define the container we mount our created volume to a particular directory. Applications will read the secrets as files from this path.
+
+volumeMounts:
+ - name: secret-volume
+   mountPath: /etc/secret-volume
+Task
+Create our new Pod using kubectl create -f secret-pod.yaml
+
+Once started you can interact with the mounted secrets. For example, you can list all the secrets available as if they're regular data. For example kubectl exec -it secret-vol-pod ls /etc/secret-volume
+
+Reading the files allows us to access the decoded secret value. To access username we'd use kubectl exec -it secret-vol-pod cat /etc/secret-volume/username
+
+For the password, we'd read the password file kubectl exec -it secret-vol-pod cat /etc/secret-volume/password
+
+
+Deploy Docker Compose with Kompose
+ Step 1 of 6 
+Step 1 - Install
+Kompose is deployed as a binary onto a client. To install Kompose on Katacoda, run the command curl -L https://github.com/kubernetes/kompose/releases/download/v1.9.0/kompose-linux-amd64 -o /usr/bin/kompose && chmod +x /usr/bin/kompose
+
+Details on how to install Kompose for your OS can be found at https://github.com/kubernetes/kompose/releases
+
+
+Step 2 - Up
+Kompose takes existing Docker Compose files and enables them to be deployed onto Kubernetes. Compose is a tool for defining and running multi-container Docker applications. With Compose, you use a Compose file to configure your application’s services.
+
+Task
+Copy an example Docker Compose file to the editor.
+
+Copy to Editorversion: "2"
+services:
+  redis-master:
+    image: redis:latest
+    ports:
+      - "6379"
+  redis-slave:
+    image: gcr.io/google_samples/gb-redisslave:v1
+    ports:
+      - "6379"
+    environment:
+      - GET_HOSTS_FROM=dns
+  frontend:
+    image: gcr.io/google-samples/gb-frontend:v3
+    ports:
+      - "80:80"
+    environment:
+      - GET_HOSTS_FROM=dns
+As with Docker Compose, Kompose allows the Images to be deployed using a single command of kompose up
+
+The details of what has been deployed can be discovered with the Kubernetes CLI kubectl.
+
+kubectl get deployment,svc,pods,pvc
+
+Step 3 - Convert
+Kompose also has the ability to take existing Compose files and generate the related Kubernetes Manifest files.
+
+The command kompose convert will generate the files, viewable via ls.
+
+Step 4 - Kubectl create
+With the files converted, they too can be deployed using Kubectl. This will match the existing deployment applied via kompose up.
+
+kubectl apply -f frontend-service.yaml,redis-master-service.yaml,redis-slave-service.yaml,frontend-deployment.yaml,redis-master-deployment.yaml,redis-slave-deployment.yaml
+
+Step 5 - OpenShift
+Kompose also supports different Kubernetes distributions, for example OpenShift.
+
+kompose --provider openshift convert
+
+Step 6 - Convert To Json
+By default, Kompose generates YAML files. It's possible to generate JSON based files by specifying the -j parameter.
+
+kompose convert -j
+
+
+Deploying a service from source onto Kubernetes
+ Step 1 of 6 
+The container
+Kubernetes doesn't run your source code directly. Instead, you hand Kubernetes a container.
+
+A container contains 1) a compiled version of your source code and 2) any/all runtime dependences necessary to run your source code.
+
+In this tutorial, we're going to use Docker as our container format. We've created a simple web application in Python, the hello-webapp. To package the webapp as a Docker container, we create a Dockerfile.
+
+We've created a Dockerfile for you, so justtype the following commands to see its contents:
+
+cd hello-webapp
+
+cat Dockerfile
+
+type the following commands to see its contents:
+
+cd hello-webapp
+
+cat Dockerfile
+
+# Run server
+FROM alpine:3.5
+RUN apk add --no-cache python py2-pip py2-gevent
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . /app
+WORKDIR /app
+EXPOSE 8080
+ENTRYPOINT ["python"]
+CMD ["app.py"]
+
+This Dockerfile starts with the base image (Alpine:3.5), installs the necessary Python dependencies for the webapp, exposes a port for the webapp on the container, and then specifies the command to run when the container starts.
+
+You can build the Docker container manually with this command:
+
+docker build -t hello-webapp:v1 .
+
+This command reads the Dockerfile, and then builds a binary image that contains everything necessary for the webapp to run.
+
+Running your containerized service
+Congratulations! You've successfully encapsulated the webapp and everything needed to run the webapp in a container, from the operating system (Alpine Linux) to the runtime environment (Python) to the actual app (hello world).
+
+Let's run the container:
+
+docker run -d -p 80:8080 hello-webapp:v1
+
+(This command runs the container, and maps the container's port 8080 to the hosts port 80.) We can verify that the webapp is running successfully:
+
+curl host01
+
+(We're now sending an HTTP request to port 80 on host01, which then maps to the 8080 in the container.)
+
+Kubernetes and manifests
+We've packaged up our service, and now it's time to get it running in Kubernetes.
+
+Why do you need Kubernetes? In short, Kubernetes takes care of all the details of running a container: which VM/server to run the container on, making sure the container has the right amount of memory/CPU/etc., and so forth.
+
+In order for Kubernetes to know how to run your container, you need a Kubernetes manifest.
+
+We've created a Kubernetes manifest file for the hello-webapp service.
+
+cat deployment.yaml
+
+Kubernetes and manifests
+We've packaged up our service, and now it's time to get it running in Kubernetes.
+
+Why do you need Kubernetes? In short, Kubernetes takes care of all the details of running a container: which VM/server to run the container on, making sure the container has the right amount of memory/CPU/etc., and so forth.
+
+In order for Kubernetes to know how to run your container, you need a Kubernetes manifest.
+
+We've created a Kubernetes manifest file for the hello-webapp service.
+
+cat deployment.yaml
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-webapp
+spec:
+  selector:
+    app: hello-webapp
+
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: NodePort
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata: {name: hello-webapp}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-webapp
+      track: stable
+  strategy:
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+    type: RollingUpdate
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        app: hello-webapp
+        track: stable
+      name: hello-webapp
+    spec:
+      containers:
+      - image: IMAGE_URL
+        imagePullPolicy: IfNotPresent
+        name: hello-webapp
+        resources:
+          limits:
+            memory: 0.25G
+            cpu: 0.25
+        terminationMessagePath: /dev/termination-log
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+
+
+You can see that the manifest is written in YAML, and contains some key bits of information about your service, including a pointer to the Docker image, memory/CPU limits, and ports exposed.
+
+So now we have 1) the code to be run, in a container and 2) the runtime configuration of how to run the code, in the Kubernetes manifest.
+
+We now need one more component before we can actually run our container -- a container registry
+
+The Container Registry
+In order for your Kubernetes cluster to run an image, it needs to get a copy of the image.
+
+We typically do this through a container registry: a central service that hosts images. There are dozens of options for container registries, for both on-premise and cloud-only use cases.
+
+In this tutorial, the Katacoda environment has provisioned a personal Docker Registry to store the built image. Set the URL for the Registry as an environment variable with the command:
+
+export REGISTRY=2886795299-5000-elsy02.environments.katacoda.com
+
+In order to push the Docker Image to the registry, we need to create a tag for the Docker image that contains our Docker repository name.
+
+docker tag hello-webapp:v1 $REGISTRY/hello-webapp:v1
+
+Then, we can push the image we just created to the Docker Registry:
+
+docker push $REGISTRY/hello-webapp:v1
+
+Running the service in Kubernetes
+Now, let's actually get this service running in Kubernetes. We're going to need to update our deployment.yaml file to point to the image for our particular service. For the purposes of this exercise, we've templated our deployment file with the variable IMAGE_URL, which we'll then instantiate with a sed command:
+
+sed -i -e 's@IMAGE_URL@'"$REGISTRY/hello-webapp:v1"'@' deployment.yaml
+
+(f you run cat deployment.yaml you'll see that your specific Docker repository is now in the deployment.yaml file.)
+
+To gain access to the Kubernetes cluster, the Kubernetes configuration file needs to be downloaded from the master. The configuration file contains the IP addresses and certificates required to communicate securely with Kubernetes.
+
+scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@host01:/root/.kube/config ~/.kube/
+
+Now, we can run actually get the service running:
+
+kubectl apply -f deployment.yaml
+
+We're telling Kubernetes to actually process the information in the manifest.
+
+We can see the services running:
+
+kubectl get services
+
+Accessing the cluster
+Now, we want to send an HTTP request to the service. Most Kubernetes services are not exposed to the Internet, for obvious reasons. So we need to be able to access services that are running in the cluster directly.
+
+kubectl get pods
+
+When the service was deployed, a dynamic NodePort was assigned to the Pod. This can be accessed via kubectl get svc
+
+Store the port assigned as a variable for later use.
+
+export PORT=$(kubectl get svc hello-webapp -o go-template='{{range.spec.ports}}{{if .nodePort}}{{.nodePort}}{{"\n"}}{{end}}{{end}}')
+
+We can now send an HTTP request to the service:
+
+curl host01:$PORT
+
+You'll see the "Hello, World" message again. Congratulations, you've got your service running in Kubernetes!
+
+The four pieces required for deployment
+We've just performed four main things 1) created a container 2) created the Kubernetes manifest 3) pushed the container to a registry and 4) finally told Kubernetes all about these pieces with an updated manifest.
+
+So, this was a bunch of steps, and if you have to do this over-and-over again (as you would for development), this would quickly grow tedious. Let's take a quick look at how we might script these steps so we could create a more useable workflow.
+
+Automating the deployment process
+Your service is now on Hacker News, and you want to create a custom greeting. So let's change some of the source code:
+
+sed -i -e 's/Hello World!/Hello Hacker News!!!/' app.py
+
+We could rebuild the container, push it to the registry, and edit the deployment, but you've probably already forgotten all the exact commands, right?
+
+Luckily, Forge is an open source tool for deploying services onto Kubernetes, and it already does the automation (and then some!). Let's try using Forge to do this deployment. We need to do a quick setup of Forge:
+
+forge setup
+
+To setup Forge, enter the URL for our Docker Registry: 2886795299-5000-elsy02.environments.katacoda.com
+
+Enter the username for the Registry, in this case root.
+
+Enter the organization, again root.
+
+Finally, enter root for the password.
+
+With Forge configured, type:
+
+forge deploy
+
+Forge will automatically build your Docker container (based on your Dockerfile), push the container to your Docker registry of choice, build a deployment.yaml file for you that points to your image, and then deploy the container into Kubernetes.
+
+This process will take a few moments as Kubernetes terminates the existing container and swaps in the new code. We'll need to set up a new port forward command. Let's get the pod status again:
+
+kubectl get pods
+
+As previously, obtain the NodePort assigned to our deployment.
+
+export PORT=$(kubectl get svc hello-webapp -o go-template='{{range.spec.ports}}{{if .nodePort}}{{.nodePort}}{{"\n"}}{{end}}{{end}}')
+
+Now, let's check out our new welcome message:
+
+curl host01:$PORT
+
+Congratulations! You've applied the basic concepts necessary for you to develop and deploy source code into Kubernetes.
+
+Heptio Velero
+ Step 1 of 3 
+Set Up our Environment
+Let's pull down the Heptio Velero GitHub repo to help us get started: git clone https://github.com/heptio/velero
+
+Let's download and install the Velero client: curl -LO https://github.com/heptio/velero/releases/download/v1.1.0/velero-v1.1.0-linux-amd64.tar.gz
+
+tar -C /usr/local/bin -xzvf velero-v1.1.0-linux-amd64.tar.gz
+
+Add velero directory to PATH export PATH=$PATH:/usr/local/bin/velero-v1.1.0-linux-amd64/
+Create a Velero-specific credentials file (credentials-velero) in your local directory:
+
+echo "[default]
+aws_access_key_id = minio
+aws_secret_access_key = minio123" > credentials-velero
+Start the server and the local storage service:
+
+kubectl apply -f velero/examples/minio/00-minio-deployment.yaml
+
+velero install \
+    --provider aws \
+    --bucket velero \
+    --secret-file ./credentials-velero \
+    --use-volume-snapshots=false \
+    --backup-location-config region=minio,s3ForcePathStyle="true",s3Url=http://minio.velero.svc:9000
+
+This example assumes that it is running within a local cluster without a volume provider capable of snapshots, so no VolumeSnapshotLocation is created (--use-volume-snapshots=false).
+
+Deploy an example nginx application: kubectl apply -f velero/examples/nginx-app/base.yaml
+
+Check to see that both Velero and nginx deployments have been successfully created:
+
+kubectl get deployments -l component=velero --namespace=velero
+
+kubectl get deployments --namespace=nginx-example
+
+ Step 2 of 3 
+Back Up Our Resources
+Let's backup any resource with labels "app=nginx": velero backup create nginx-backup --selector app=nginx
+
+Verify if the backup has completed velero backup describe nginx-backup
+
+Now, let's simulate a disaster: kubectl delete namespace nginx-example
+
+Check that the nginx service and deployment are gone:
+
+kubectl get deployments --namespace=nginx-example
+kubectl get services --namespace=nginx-example
+
+kubectl get namespace/nginx-example
+
+You should get no results.
+
+NOTE: You might need to wait for a few minutes for the namespace to be fully cleaned up.
+
+Restore Our Resources
+Run: velero restore create --from-backup nginx-backup
+
+Run: velero restore get
+
+NOTE: The restore can take a few moments to finish. During this time, the STATUS column reads InProgress.
+
+After a successful restore, the STATUS column is Completed, and WARNINGS and ERRORS are 0. All objects in the nginx-example namespace should be just as they were before you deleted them.
+
+If there are errors or warnings, you can look at them in detail:
+
+velero restore describe <RESTORE_NAME>
+
+You can verify that the nginx resources are available again:
+
+kubectl get services --namespace=nginx-example
+
+kubectl get namespace/nginx-example
+
+
+Basic Kubernetes Observability
+ Step 1 of 5 
+Your Kubernetes Cluster
+
+
+For this scenario, Katacoda has just started a fresh Kubernetes cluster for you. Verify it's ready for your use.
+
+kubectl version --short && \
+kubectl get componentstatus && \
+kubectl get nodes && \
+kubectl cluster-info
+
+The Helm package manager used for installing applications on Kubernetes is also available.
+
+helm version --short
+Kubernetes Dashboard
+You can administer your cluster with the kubectl CLI tool or use the visual Kubernetes Dashboard. Use this script to access the protected Dashboard.
+
+token.sh
+
+ Step 2 of 5 
+Sample Application
+Before exploring observability topics, start a small application to provide something to observe.
+
+Run 3 instances of the random-logger container to start generating continuously random logging events.
+
+kubectl create deployment random-logger --image=chentex/random-logger
+
+Scale to 3 instances.
+
+kubectl scale deployment/random-logger --replicas=3
+The 3 pods will start shortly.
+
+kubectl get pods
+
+Thank you to Vicente Zepeda for providing this beautifully simple container. The source code is here.
+
+(click on the site)
+
+ Step 3 of 5 
+Resource Inspection
+General Inspection of a Cluster
+When you first start interacting with a running cluster there are a few commands to help you get oriented with its health and state.
+
+Inspect the cluster general state.
+
+kubectl cluster-info
+
+Inspect this Kubernetes cluster only Worker node.
+
+kubectl describe node node01
+For deeper details, you can generate a complete dump of the cluster state to a directory.
+
+kubectl cluster-info dump --all-namespaces --output-directory=cluster-state --output=json
+
+This creates a directory where each file is a report on all the nodes and namespaces.
+
+tree cluster-state
+
+There is a wealth of information you can mine.
+
+Show me all the container images names in the kube-system namespace. jq '.items[].status.containerStatuses[].image' cluster-state/kube-system/pods.json
+
+Show me when all the container images were started in the default namespace. jq '.items[].status.containerStatuses[] | [.image, .state[].startedAt]' cluster-state/default/pods.json
+
+General Inspection for a Deployment
+The running state of an application can be observed through a variety of kubectl describe commands across various resources.
+
+Inspect the last deployment.
+
+kubectl describe deployment random-logger
+
+Specifically, the replica state.
+
+kubectl describe deployments | grep "Replicas:"
+
+Inspect the 3 pods.
+
+kubectl get pods
+
+kubectl describe pods
+
+Events
+Kubernetes also maintains a history of events.
+
+kubectl get events
+
+Scaling is a type of event. Scale down the Pod from 3 down to 2.
+
+kubectl scale deployment/random-logger --replicas=2
+
+Notice the last event will reflect the scaling request.
+
+kubectl get events --sort-by=.metadata.creationTimestamp
+
+These events are not to be confused with security audit logs which are also recorded.
+
+Inspecting Containers
+You can also typically get into a running container and inspect it as well. Get the name of the first Pod.
+
+POD=$(kubectl get pod  -o jsonpath="{.items[0].metadata.name}")
+
+Inspect the script contents inside the container file system.
+
+kubectl exec $POD -- cat entrypoint.sh
+
+Or, shell into the container.
+
+kubectl exec -it $POD -- /bin/sh
+
+and come back out with the exit command.
+
+There is a wealth of helpful Linux commands to give you information about the Linux containers. Here are just a few.
+
+kubectl exec $POD -- uptime
+
+kubectl exec $POD -- ps
+
+kubectl exec $POD -- stat -f /
+
+kubectl exec $POD --container random-logger -- lsof
+
+kubectl exec $POD --container random-logger -- iostat
+
+When the Pod has more than one container, the specific container name may be referenced.
+
+kubectl exec $POD --container random-logger -- ls -a -l
+
+ Step 4 of 5 
+cAdvisor
+Every Node in a Kubernetes cluster has a Kubelet process. Within each Kubelet process is a cAdvisor. The cAdvisor continuously gathers metrics about the state of the Kubernetes resources on each Node. This metrics information is vital to monitor to understand the state of the cluster. This wealth of information is available through the Resource Metrics API. Let's inspect the metrics.
+
+Each node exposes statistics continuously updated by cAdvisor. For your cluster, get a list of the node names.
+
+kubectl get nodes
+For this small Kubernetes cluster on Katacoda, the two node names can be listed.
+
+export NODE_0=$(kubectl get nodes -o=jsonpath="{.items[0].metadata.name}")
+
+export NODE_1=$(kubectl get nodes -o=jsonpath="{.items[1].metadata.name}")
+
+echo -e "The master node is $NODE_0 \nThe worker node is $NODE_1"
+
+Open a proxy to the Kubernetes API port.
+
+kubectl proxy > /dev/null &
+
+Query the metrics for the master node.
+
+curl localhost:8001/api/v1/nodes/$NODE_0/proxy/metrics
+
+Query the metrics for the worker node.
+
+curl localhost:8001/api/v1/nodes/$NODE_1/proxy/metrics
+
+The Kubernetes API aggregates cluster-wide metrics at /metrics.
+
+curl localhost:8001/metrics/ | jq
+
+ Step 5 of 5 
+Metrics Server
+The de facto light monitoring application for Kubernetes is metrics-server. Metrics Server is a metrics aggregator. It discovers all nodes on the cluster and queries each node’s kubelet for CPU and memory usage. There is no long term metrics storage, it holds just the latest metrics. Typically, the server may be installed with a Helm chart.
+
+Add the Bitnami chart repository for the Helm chart to be installed.
+
+helm repo add bitnami https://charts.bitnami.com/bitnami
+Install the chart.
+
+helm install metrics-server bitnami/metrics-server \
+  --version=4.2.2 \
+  --namespace kube-system \
+  --set apiService.create=true \
+  --set extraArgs.kubelet-insecure-tls=true \
+  --set extraArgs.kubelet-preferred-address-types=InternalIP
+This will install the server in the kube-system namespace. It also add a new API endpoint named metrics.k8s.io. In a few moments you should be able to list metrics using the following command:
+
+kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes | jq
+
+If the metrics are not ready, this message will appear
+
+Error from server (ServiceUnavailable): the server is currently unable to handle the request
+
+Once the metrics are ready, a JSON dump of the metrics will appear. Additional metrics also appears in the top report.
+
+kubectl top node
+
+If the metrics are not ready you may get this message.
+
+Error from server (ServiceUnavaliable): the server is currently unable to handle the request (get nodes.metrics.k8s.io)
+
+or
+
+error: metrics not available yet
+
+However, once the metrics are available the normal message should look similar to this:
+
+NAME           CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%
+controlplane   138m         6%     991Mi           52%
+node01         79m          3%     575Mi           14%
+Pod information can also be observed.
+
+kubectl top pods --all-namespaces
+
+Metrics information is also reflected in the dashboard. Launch the Kubernetes dashboard and in pages for each resource the same Top information appears in the UI. The also utilizes these vital metrics to make decisions to scale up and down Pod instances.
+
+In the past, there was no Resource Metrics API and a service called Heapster, now deprecated, used to gather all the cAdvisor metrics and bit more manually. Around the 1.6 to 1.8 Kubernetes releases the Resource Metrics API was added. In concert, Heapster was removed and Metrics Server is now the de facto service that aggregates metrics from the Metrics API.
+
+Metrics-server is a lighter version of Heapster. It gathers the latest metrics for reference and does not store historical data. For accumulation of trending metrics, the de facto Prometheus time-series database can optionally be added to a cluster.
+
+The exposed Resource Metrics API is documented here.
+
+Another metric gathering server is kube-state-metrics. It is used to provide metrics information for Prometheus. Once you need more metrics that are gathered over time, then typically Prometheus is added to the cluster.
+
+Logging with EFK
+ Step 1 of 7 
+Your Kubernetes Cluster
+
+
+For this scenario, Katacoda has just started a fresh Kubernetes cluster for you. Verify it's ready for your use.
+
+kubectl version --short && \
+kubectl get componentstatus && \
+kubectl get nodes && \
+kubectl cluster-info
+
+The Helm package manager used for installing applications on Kubernetes is also available.
+
+helm version --short
+Kubernetes Dashboard
+You can administer your cluster with the kubectl CLI tool or use the visual Kubernetes Dashboard. Use this script to access the protected Dashboard.
+
+token.sh
+ Step 2 of 7 
+Deploy ElasticSearch
+Elasticsearch is a RESTful search engine based on the Lucene library. It provides a distributed, multitenant-capable full-text search engine with an HTTP web interface and schema-free JSON documents. Elasticsearch is open source and developed in Java.
+
+Create a namespace for the installation target.
+
+kubectl create namespace logs
+
+Add the chart repository for the Helm chart to be installed.
+
+helm repo add elastic https://helm.elastic.co
+
+Deploy the public Helm chart for ElasticSearch. The chart's default settings are appropriately opinionated for production deployment. Here, some of the default settings are downsized to fit in this Katacoda cluster.
+
+helm install elasticsearch elastic/elasticsearch \
+--version=7.9.0 \
+--namespace=logs \
+-f elastic-values.yaml
+
+ElasticsSearch is starting and will be available in a few moments. In the meantime, continue to the next installation step.
+
+Deploy Fluent Bit
+Fluent Bit is an open source specialized data collector. It provides built-in metrics and general purpose output interfaces for centralized collectors such as Fluentd. Create the configuration for Fluent Bit.
+
+Install Fluent Bit and pass the ElasticSearch service endpoint as a chart parameter. This chart will install a DaemonSet that will start a Fluent Bit pod on each node. With this, each Fluent Bit service will collect the logs from each node and stream it to ElasticSearch.
+
+Add the chart repository for the Helm chart to be installed.
+
+helm repo add fluent https://fluent.github.io/helm-charts
+
+Install the chart.
+
+helm install fluent-bit fluent/fluent-bit \
+  --version 0.6.3 \
+  --namespace=logs
+Fluent Bit is starting and will become available in a few moments. In the meantime, continue to the next installation step.
+
+ Step 4 of 7 
+Deploy Kibana
+Kibana is a free and open user interface that lets you visualize your Elasticsearch data and navigate the Elastic Stack. Do anything from tracking query load to understanding the way requests flow through your apps.
+
+Deploy Kibana. The service will be on a NodePort at 31000.
+
+helm install kibana elastic/kibana \
+  --version=7.9.0 \
+  --namespace=logs \
+  --set service.type=NodePort \
+  --set service.nodePort=31000
+Security caution. This NodePort exposes the logging to the outside world intentionally for demonstration purposes. However, for production Kubernetes clusters never expose the Kibana dashboard service to the world without any authentication.
+
+Kibana is starting and will become available in a few minutes.
+
+ Step 5 of 7 
+Verify Running Stack
+All three installations of ElasticSearch, Fluent Bit, and Kibana are either still initializing or fully available.
+
+To inspect the status of these deployments run this watch.
+
+watch kubectl get deployments,pods,services --namespace=logs
+
+Once complete, the Pods will move to the Running state. The full stack is not ready until all the Deployment statuses move to the Available (1) state.
+
+When all Deployments report Available and the Pods report Running use this clear to break out of the watch or press ctrl+c.
+
+You know have a full EFK stack running. Granted this stack smaller and not configure to he highly available or with access protection, but it comprises a functional solution to get started.
+
+ Step 6 of 7 
+Generate Log Events
+Run this container to start generating random log events.
+
+kubectl run random-logger --image=chentex/random-logger
+
+Thank you to Vicente Zepeda for providing this beautifully simple container.
+
+The log events will look something like this.
+
+...
+INFO takes the value and converts it to string.
+DEBUG first loop completed.
+ERROR something happened in this execution.
+WARN variable not in use.
+...
+Inspect the actual log events now being generated with this log command.
+
+kubectl logs pod/random-logger
+
+Don't be alarmed by the messages, these are just samples.
+View Log Events
+Katacoda has exposed the NodePort 31000 to access Kibana from your browser.
+
+Access Kibana. There is also a tab above the command-line area labeled Kibana that takes you to the same Kibana portal.
+
+Security
+Tip: There are no credentials to access this EFK stack through Kibana. For real deployments, you would never expose this type of information without at least an authentication wall. Logs typically reveal lots of dirty laundry and attack vector opportunities.
+
+Kibana Portal
+New information and logs are currently streaming into Elasticsearch from various components. You can use the Portal to create filters to find only the logs emanating from the random-logger.
+
+To see the logs collected from the random-logger follow these steps in the Kibana portal.
+
+When Kibana appears for the first time there will be a brief animation while it initializes.
+On the Welcome page click Explore on my own.
+From the left-hand drop-down menu (≡) select the Discover item.
+Click on the button Create index pattern on the top.
+In the form field Index pattern enter logstash-*
+It should read "Success!" and Click the > Next step button on the right.
+In the next form, from the dropdown labeled Time Filter field name, select @timestamp.
+From the bottom-right of the form select Create index pattern.
+In a moment a list of fields will appear.
+Again, from the left-hand drop-down menu (≡) select the Discover item.
+On the right is a listing of all the log events. On the left, is a list of available fields to choose for filtering.
+Filter the log list by first choosing the _kubernetes.podname field. When you hover over or click on the word _kubernetes.podname, click the Add button to the right of the label.
+The filter selection is added to the Selected fields list. Click on the filter and select the magnifying glass (🔍) with the plus sign (+) next to random-logger.
+Now only then events from the random-logger appear.
+From the available field list, select and add the log field.
+The log list now is filtered to show log events from the random-logger service. You can expand each event to reveal further details.
+
+From here you can start to appreciate the amount of information this stack provides. More information is in the Kibana documentation.
+
+
