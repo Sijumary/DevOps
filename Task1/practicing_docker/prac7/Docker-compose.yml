@@ -10,4 +10,4 @@ services:
     - "9040:80"
     volumes:
     - "./:/var/www/html"
-    container_name: trying
+    container_name: myphpapp

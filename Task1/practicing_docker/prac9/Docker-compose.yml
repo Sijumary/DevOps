@@ -4,7 +4,7 @@ services:
   db:
     image: mysql:latest
     restart: always
-    container_name: myphpapp-db
+    container_name: mphp-db
     environment: 
       MYSQL_ROOT_PASSWORD: somepassword
       MYSQL_DATABASE: somedatabase

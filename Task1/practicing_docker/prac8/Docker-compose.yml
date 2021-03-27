@@ -10,11 +10,11 @@ services:
       - "9040:80"
     volumes: 
       - "./:/var/www/html"
-    container_name: trying_again
+    container_name: myphpapp
 
   db:
     image: mysql:5.7
     restart: always
     environment: 
       MYSQL_ROOT_PASSWORD: my!!root!!!pw
-    container_name: trying-db
+    container_name: php-db
